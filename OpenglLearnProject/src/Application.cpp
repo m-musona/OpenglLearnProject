@@ -15,12 +15,13 @@
 #include "Shader.h"
 #include "Texture.h"
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-
 #include "imgui/imgui.h"
 #include "imgui//imgui_impl_glfw.h"
 #include "imgui//imgui_impl_opengl3.h"
+
+#include "tests/TestClearColor.h"
+#include "tests/TestTexture2D.h"
+#include "tests/TestBackPackModel.h"
 
 int main(void)
 {
@@ -53,62 +54,9 @@ int main(void)
 
     std::cout << glGetString(GL_VERSION) << std::endl;
     {
-        //float positions[12] = {
-        //    -0.5f,  0.5f,
-        //    -0.7f, -0.5f,
-        //    -0.2f, -0.5f,
-
-        //     0.5f,  0.5f,
-        //     0.7f, -0.5f,
-        //     0.2f, -0.5f,
-        //};
-
-        float positions[] = {
-            // positions      // Texture Coords
-             -50.0f,  -50.0f, 0.0f, 0.0f,
-              50.0f,  -50.0f, 1.0f, 0.0f,
-              50.0f,   50.0f, 1.0f, 1.0f,
-             -50.0f,   50.0f, 0.0f, 1.0f
-        };
-
-        unsigned int indices[] = {
-            0, 1, 2,
-            2, 3, 0
-        };
 
         GLCall(glEnable(GL_BLEND));
         GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-
-        unsigned int vertexarrayobject;
-        GLCall(glGenVertexArrays(1, &vertexarrayobject));
-        GLCall(glBindVertexArray(vertexarrayobject));
-
-        VertexArray vertexarray;
-        VertexBuffer vertexbuffer(positions, 4 * 4 * sizeof(float));
-
-        VertexBufferLayout layout;
-        layout.Push<float>(2);
-        layout.Push<float>(2);
-        vertexarray.AddBuffer(vertexbuffer, layout);
-
-        IndexBuffer indexbuffer(indices, 6);
-
-        glm::mat4 proj = glm::ortho(0.0f, 960.0f, 0.0f, 540.0f, -1.0f, 1.0f);
-        glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0));
-
-        Shader shader("res/shaders/basic.shader");
-        shader.Bind();
-        shader.SetUniform4f("u_Color", 0.8f, 0.3f, 0.8f, 1.0f);
-        
-
-        Texture texture("res/textures/Google.png");
-        texture.Bind();
-        shader.SetUniform1i("u_Texture", 0);
-
-        vertexarray.Unbind();
-        vertexbuffer.Unbind();
-        indexbuffer.Unbind();
-        shader.Unbind();
 
         Renderer renderer;
 
@@ -127,16 +75,21 @@ int main(void)
         ImGui_ImplGlfw_InitForOpenGL(window, true);
         ImGui_ImplOpenGL3_Init(glsl_version);
 
-        glm::vec3 translationA(200, 200, 0);
-        glm::vec3 translationB(400, 200, 0);
+        test::Test* currentTest = nullptr;
+        test::TestMenu* testmenu = new test::TestMenu(currentTest);
+        currentTest = testmenu;
 
-        float r = 0.0f;
-        float increment = 0.01f;
+        testmenu->RegisterTest<test::TestClearColor>("Clear Color");
+        testmenu->RegisterTest<test::TestTexture2D>("Texture 2D");
+        testmenu->RegisterTest<test::TestBackPackModel>("Back Pack Model");
+
+
 
         /* Loop until the user closes the window */
         while (!glfwWindowShouldClose(window))
         {
             /* Render here */
+            GLCall(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
             renderer.Clear();
 
             // Start the Dear ImGui frame
@@ -144,41 +97,21 @@ int main(void)
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
 
-            // shader.SetUniform4f("u_Color", r, 0.3f, 0.8f, 0.1f);
+            if (currentTest)
             {
-                glm::mat4 model = glm::translate(glm::mat4(1.0f), translationA);
-                glm::mat4 mvp = proj * view * model;
-                shader.Bind();
-                shader.SetUniformMat4f("u_MVP", mvp);
-
-                renderer.Draw(vertexarray, indexbuffer, shader);
-            }
-            
-            {
-                glm::mat4 model = glm::translate(glm::mat4(1.0f), translationB);
-                glm::mat4 mvp = proj * view * model;
-                shader.Bind();
-                shader.SetUniformMat4f("u_MVP", mvp);
-
-                renderer.Draw(vertexarray, indexbuffer, shader);
-            }
-
-            if (r > 1.0f)
-                increment = -0.05f;
-            else if (r < 0.0f)
-                increment = 0.05f;
-
-            r += increment;
-
-            {
-                ImGui::Begin("Debug"); // Create a window called "Hello, world!" and append into it.
-
-                ImGui::SliderFloat3("Translation A", &translationA.x, 0.0f, 960.0f);
-                ImGui::SliderFloat3("Translation B", &translationB.x, 0.0f, 960.0f);
-                ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-
+                currentTest->OnUpdate(0.0f);
+                currentTest->OnRender();
+                ImGui::Begin("Test");
+                if (currentTest != testmenu && ImGui::Button("<-"))
+                {
+                    delete currentTest;
+                    currentTest = testmenu;
+                }
+                currentTest->OnImGuiRender();
                 ImGui::End();
             }
+
+            
 
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -188,7 +121,11 @@ int main(void)
             /* Poll for and process events */
             glfwPollEvents();
         }
+        delete currentTest;
+        if (currentTest != testmenu)
+            delete testmenu;
     }
+
 
     // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
